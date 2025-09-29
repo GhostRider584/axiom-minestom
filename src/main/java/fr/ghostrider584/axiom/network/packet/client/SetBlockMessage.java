@@ -26,6 +26,11 @@ public record SetBlockMessage(
 		int sequenceId
 ) implements ClientPacket {
 
+	public SetBlockMessage {
+		blocks = Map.copyOf(blocks);
+		preventUpdatesAt = Set.copyOf(preventUpdatesAt);
+	}
+
 	public static final NetworkBuffer.Type<SetBlockMessage> TYPE = new NetworkBuffer.Type<>() {
 		private static final NetworkBuffer.Type<PlayerHand> PLAYER_HAND_TYPE = NetworkBuffer.Enum(PlayerHand.class);
 

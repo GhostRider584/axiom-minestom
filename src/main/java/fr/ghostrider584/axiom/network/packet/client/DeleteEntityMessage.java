@@ -11,6 +11,10 @@ import static net.minestom.server.network.NetworkBuffer.*;
 
 public record DeleteEntityMessage(List<UUID> entityUuids) implements ClientPacket {
 
+	public DeleteEntityMessage {
+		entityUuids = List.copyOf(entityUuids);
+	}
+
 	public static final NetworkBuffer.Type<DeleteEntityMessage> TYPE = NetworkBufferTemplate.template(
 			UUID.list(Short.MAX_VALUE), DeleteEntityMessage::entityUuids,
 			DeleteEntityMessage::new

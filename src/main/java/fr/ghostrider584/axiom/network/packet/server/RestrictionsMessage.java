@@ -18,6 +18,10 @@ public record RestrictionsMessage(
 		Set<PlotBox> bounds
 ) implements ServerPacket.Play {
 
+	public RestrictionsMessage {
+		bounds = Set.copyOf(bounds);
+	}
+
 	public static final NetworkBuffer.Type<RestrictionsMessage> TYPE = NetworkBufferTemplate.template(
 			AxiomPermission.PERMISSION_SET, RestrictionsMessage::allowedPermissions,
 			AxiomPermission.PERMISSION_SET, RestrictionsMessage::deniedPermissions,

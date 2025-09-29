@@ -20,6 +20,10 @@ public record ManipulateEntityMessage(
 		List<ManipulateEntry> entries
 ) implements ClientPacket {
 
+	public ManipulateEntityMessage {
+		entries = List.copyOf(entries);
+	}
+
 	public static final NetworkBuffer.Type<ManipulateEntityMessage> TYPE = new NetworkBuffer.Type<>() {
 		@Override
 		public void write(@NotNull NetworkBuffer buffer, ManipulateEntityMessage value) {
@@ -105,5 +109,9 @@ public record ManipulateEntityMessage(
 			PassengerManipulation passengerManipulation,
 			List<UUID> passengers
 	) {
+		public ManipulateEntry {
+			relativeMovementSet = relativeMovementSet == null ? null : Set.copyOf(relativeMovementSet);
+			passengers = List.copyOf(passengers);
+		}
 	}
 }

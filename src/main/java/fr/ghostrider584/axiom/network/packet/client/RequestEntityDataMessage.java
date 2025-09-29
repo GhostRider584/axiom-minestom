@@ -14,6 +14,10 @@ public record RequestEntityDataMessage(
 		List<UUID> entityUuids
 ) implements ClientPacket {
 
+	public RequestEntityDataMessage {
+		entityUuids = List.copyOf(entityUuids);
+	}
+
 	public static final NetworkBuffer.Type<RequestEntityDataMessage> TYPE = NetworkBufferTemplate.template(
 			LONG, RequestEntityDataMessage::requestId,
 			UUID.list(Short.MAX_VALUE), RequestEntityDataMessage::entityUuids,

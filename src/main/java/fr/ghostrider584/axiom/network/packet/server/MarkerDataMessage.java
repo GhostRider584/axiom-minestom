@@ -19,6 +19,11 @@ public record MarkerDataMessage(
 		Set<UUID> removedMarkers
 ) implements ServerPacket.Play {
 
+	public MarkerDataMessage {
+		changedMarkers = List.copyOf(changedMarkers);
+		removedMarkers = Set.copyOf(removedMarkers);
+	}
+
 	public static final NetworkBuffer.Type<MarkerDataMessage> TYPE = NetworkBufferTemplate.template(
 			MarkerData.TYPE.list(1024), MarkerDataMessage::changedMarkers,
 			UUID.set(1024), MarkerDataMessage::removedMarkers,

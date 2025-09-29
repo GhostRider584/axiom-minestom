@@ -16,6 +16,10 @@ public record ResponseEntityDataMessage(
 		Map<UUID, CompoundBinaryTag> entityData
 ) implements ServerPacket.Play {
 
+	public ResponseEntityDataMessage {
+		entityData = Map.copyOf(entityData);
+	}
+
 	public static final NetworkBuffer.Type<ResponseEntityDataMessage> TYPE = NetworkBufferTemplate.template(
 			LONG, ResponseEntityDataMessage::requestId,
 			BOOLEAN, ResponseEntityDataMessage::finished,

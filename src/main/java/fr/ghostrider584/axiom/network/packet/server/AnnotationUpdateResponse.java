@@ -11,6 +11,10 @@ public record AnnotationUpdateResponse(
 		List<AnnotationUpdateAction> actions
 ) implements ServerPacket.Play {
 
+	public AnnotationUpdateResponse {
+		actions = List.copyOf(actions);
+	}
+
 	public static final NetworkBuffer.Type<AnnotationUpdateResponse> TYPE = NetworkBufferTemplate.template(
 			AnnotationUpdateAction.LIST_TYPE, AnnotationUpdateResponse::actions,
 			AnnotationUpdateResponse::new

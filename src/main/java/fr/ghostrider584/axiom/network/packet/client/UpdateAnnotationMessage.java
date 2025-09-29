@@ -11,6 +11,10 @@ public record UpdateAnnotationMessage(
 		List<AnnotationUpdateAction> actions
 ) implements ClientPacket {
 
+	public UpdateAnnotationMessage {
+		actions = List.copyOf(actions);
+	}
+
 	public static final NetworkBuffer.Type<UpdateAnnotationMessage> TYPE = NetworkBufferTemplate.template(
 			AnnotationUpdateAction.LIST_TYPE, UpdateAnnotationMessage::actions,
 			UpdateAnnotationMessage::new

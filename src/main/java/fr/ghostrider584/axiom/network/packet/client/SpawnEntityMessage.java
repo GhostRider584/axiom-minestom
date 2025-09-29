@@ -10,9 +10,11 @@ import java.util.UUID;
 
 import static net.minestom.server.network.NetworkBuffer.*;
 
-public record SpawnEntityMessage(
-		List<SpawnEntry> entries
-) implements ClientPacket {
+public record SpawnEntityMessage(List<SpawnEntry> entries) implements ClientPacket {
+
+	public SpawnEntityMessage {
+		entries = List.copyOf(entries);
+	}
 
 	public static final NetworkBuffer.Type<SpawnEntityMessage> TYPE = NetworkBufferTemplate.template(
 			SpawnEntry.TYPE.list(Short.MAX_VALUE), SpawnEntityMessage::entries,
