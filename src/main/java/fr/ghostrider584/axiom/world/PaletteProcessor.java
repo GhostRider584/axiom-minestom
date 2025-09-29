@@ -1,8 +1,10 @@
 package fr.ghostrider584.axiom.world;
 
+import fr.ghostrider584.axiom.util.CompressedBlockEntity;
 import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.MinecraftServer;
+import net.minestom.server.coordinate.CoordConversion;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.coordinate.Vec;
 import net.minestom.server.instance.Chunk;
@@ -153,6 +155,21 @@ public class PaletteProcessor {
 				return currentStateId;
 			});
 
+			blockEntities.forEach((position, binaryTag) -> {
+				final int relativeX = CoordConversion.globalToSectionRelative(position.blockX());
+				final int relativeY = position.blockY();
+				final int relativeZ = CoordConversion.globalToSectionRelative(position.blockZ());
+
+				final int blockSectionY = CoordConversion.globalToSection(position.blockY());
+				if (blockSectionY == sectionY) {
+					final var currentBlock = chunk.getBlock(relativeX, relativeY, relativeZ);
+
+					if (binaryTag instanceof CompoundBinaryTag compoundTag && !compoundTag.keySet().isEmpty()) {
+						chunk.setBlock(relativeX, relativeY, relativeZ, currentBlock.withNbt(compoundTag));
+					}
+				}
+			});
+
 			MinecraftServer.getSchedulerManager().scheduleNextTick(chunk::sendChunk);
 			LOGGER.trace("Sent chunk update for [{}, {}]", chunk.getChunkX(), chunk.getChunkZ());
 		}
@@ -173,7 +190,17 @@ public class PaletteProcessor {
 
 	private static BinaryTag parseCompressedBlockEntity(NetworkBuffer buffer) {
 		try {
-			return buffer.read(NBT);
+			int originalSize = buffer.read(VAR_INT);
+			byte compressionDict = buffer.read(BYTE);
+			byte[] compressedBytes = buffer.read(BYTE_ARRAY);
+
+			if (compressionDict != 0) {
+				LOGGER.error("Unknown compression dict: {}", compressionDict);
+				return CompoundBinaryTag.empty();
+			}
+
+			final var compressed = new CompressedBlockEntity(originalSize, compressionDict, compressedBytes);
+			return CompressedBlockEntity.decompress(compressed);
 		} catch (Exception e) {
 			LOGGER.warn("Failed to parse block entity NBT", e);
 			return CompoundBinaryTag.empty();
