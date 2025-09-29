@@ -1,7 +1,7 @@
 package fr.ghostrider584.axiom.annotation.storage.json.serializer;
 
 import com.google.gson.*;
-import org.joml.Quaternionf;
+import fr.ghostrider584.axiom.math.Quaternionf;
 
 import java.lang.reflect.Type;
 
@@ -9,10 +9,10 @@ public class QuaternionfAdapter implements JsonSerializer<Quaternionf>, JsonDese
 	@Override
 	public JsonElement serialize(Quaternionf src, Type typeOfSrc, JsonSerializationContext context) {
 		final var obj = new JsonObject();
-		obj.addProperty("x", src.x);
-		obj.addProperty("y", src.y);
-		obj.addProperty("z", src.z);
-		obj.addProperty("w", src.w);
+		obj.addProperty("x", src.x());
+		obj.addProperty("y", src.y());
+		obj.addProperty("z", src.z());
+		obj.addProperty("w", src.w());
 		return obj;
 	}
 

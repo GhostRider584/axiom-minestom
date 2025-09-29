@@ -5,10 +5,9 @@ import com.google.gson.reflect.TypeToken;
 import fr.ghostrider584.axiom.annotation.data.*;
 import fr.ghostrider584.axiom.annotation.storage.AnnotationStorage;
 import fr.ghostrider584.axiom.annotation.storage.json.serializer.*;
+import fr.ghostrider584.axiom.math.Quaternionf;
 import net.minestom.server.coordinate.Point;
 import net.minestom.server.utils.Direction;
-import org.joml.Quaternionf;
-import org.joml.Vector3f;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -80,7 +79,6 @@ public class JsonAnnotationStorage implements AnnotationStorage {
 		return new GsonBuilder()
 				.setPrettyPrinting()
 				.registerTypeAdapter(AnnotationData.class, new AnnotationDataAdapter())
-				.registerTypeAdapter(Vector3f.class, new Vector3fAdapter())
 				.registerTypeAdapter(Quaternionf.class, new QuaternionfAdapter())
 				.registerTypeAdapter(Point.class, new PointAdapter())
 				.registerTypeAdapter(Direction.class, new DirectionAdapter())

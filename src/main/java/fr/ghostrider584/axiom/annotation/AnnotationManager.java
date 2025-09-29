@@ -121,7 +121,8 @@ public class AnnotationManager {
 
 		final var annotation = annotations.get(move.uuid());
 		if (annotation != null) {
-			annotation.setPosition(move.to());
+			final var movedAnnotation = annotation.withPosition(move.to());
+			annotations.put(move.uuid(), movedAnnotation);
 			return true;
 		}
 		return false;
@@ -134,7 +135,8 @@ public class AnnotationManager {
 
 		final var annotation = annotations.get(rotate.uuid());
 		if (annotation != null) {
-			annotation.setRotation(rotate.to());
+			final var movedAnnotation = annotation.withRotation(rotate.to());
+			annotations.put(rotate.uuid(), movedAnnotation);
 			return true;
 		}
 		return false;
