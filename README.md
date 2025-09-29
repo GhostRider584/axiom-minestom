@@ -69,7 +69,7 @@ eventNode.addListener(AxiomSpawnEntityEvent.class, event -> {
 ```
 
 ## Demo Server
-Check out the included demo server in `demo-server/` for an example implementation with
+Check out the included demo server in `demo-server/` for an example implementation.
 
 ## Contributing
 Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.
