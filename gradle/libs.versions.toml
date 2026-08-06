@@ -1,0 +1,11 @@
+[versions]
+minestom = "2026.07.22-26.2"
+zstd-jni = "1.5.7-11"
+slf4j = "2.0.16"
+logback = "1.6.1"
+
+[libraries]
+minestom = { module = "net.minestom:minestom", version.ref = "minestom" }
+logging-slf4j = { module = "org.slf4j:slf4j-api", version.ref = "slf4j" }
+logging-logback = { module = "ch.qos.logback:logback-classic", version.ref = "logback" }
+zstd = { module = "com.github.luben:zstd-jni", version.ref = "zstd-jni" }

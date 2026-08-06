@@ -28,7 +28,7 @@ public record SetBufferMessage(
 			final byte bufferType = buffer.read(BYTE);
 
 			// TODO: handle the data here instead of in SetBufferHandler
-			final long remainingBytes = buffer.readableBytes();
+			final int remainingBytes = (int) buffer.readableBytes();
 			final byte[] remainingData = new byte[(int) remainingBytes];
 			buffer.copyTo(buffer.readIndex(), remainingData, 0, remainingBytes);
 			buffer.advanceRead(remainingBytes);
