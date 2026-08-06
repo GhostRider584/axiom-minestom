@@ -3,12 +3,12 @@ plugins {
 }
 
 group = "fr.ghostrider584"
-version = "0.0.3"
+version = "0.0.4"
 
 dependencies {
     implementation(project(":"))
-    implementation(libs.minestom)
-    implementation(libs.logging.logback)
+    implementation("net.minestom:minestom:2026.05.17c-26.1.1")
+    implementation("ch.qos.logback:logback-classic:1.5.16")
 }
 
 java {
