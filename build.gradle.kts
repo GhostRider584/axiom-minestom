@@ -2,14 +2,10 @@ plugins {
     id("smolder.publishing-conventions")
 }
 
-repositories {
-    mavenCentral()
-}
-
 dependencies {
-    compileOnly("net.minestom:minestom:2026.05.17c-26.1.1")
-    api("org.slf4j:slf4j-api:2.0.16")
-    api("com.github.luben:zstd-jni:1.5.7-4")
+    compileOnly(libs.minestom)
+    api(libs.logging.slf4j)
+    api(libs.zstd)
 }
 
 java {

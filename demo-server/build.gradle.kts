@@ -5,11 +5,6 @@ plugins {
 group = "fr.ghostrider584"
 version = "0.0.4"
 
-repositories {
-    mavenLocal()
-    mavenCentral()
-}
-
 dependencies {
     implementation(project(":"))
     implementation("net.minestom:minestom:2026.05.17c-26.1.1")
