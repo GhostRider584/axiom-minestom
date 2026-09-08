@@ -105,7 +105,7 @@ public class MarkerManager {
 
 		if (!changedMarkers.isEmpty() || !removedMarkerIds.isEmpty()) {
 			final var message = new MarkerDataMessage(changedMarkers, removedMarkerIds);
-			final var axiomPlayers = AxiomMinestom.getAxiomPlayers();
+			final var axiomPlayers = recipients(instance);
 
 			AxiomMinestom.messageRegistry().sendGrouped(axiomPlayers, message);
 
@@ -135,7 +135,7 @@ public class MarkerManager {
 			instanceMarkers.put(entity.getUuid(), currentMarker);
 
 			final var message = new MarkerDataMessage(List.of(currentMarker.toNetworkData()), Set.of());
-			final var axiomPlayers = AxiomMinestom.getAxiomPlayers();
+			final var axiomPlayers = recipients(instance);
 
 			axiomPlayers.forEach(player -> AxiomMinestom.messageRegistry().send(player, message));
 
@@ -156,7 +156,7 @@ public class MarkerManager {
 
 		if (instanceMarkers != null && instanceMarkers.remove(entity.getUuid()) != null) {
 			final var message = new MarkerDataMessage(List.of(), Set.of(entity.getUuid()));
-			final var axiomPlayers = AxiomMinestom.getAxiomPlayers();
+			final var axiomPlayers = recipients(instance);
 
 			axiomPlayers.forEach(player -> AxiomMinestom.messageRegistry().send(player, message));
 
@@ -171,6 +171,12 @@ public class MarkerManager {
 
 	public static void refreshInstanceMarkersImmediately(Instance instance) {
 		updateMarkersForInstance(instance);
+	}
+
+	static List<Player> recipients(Instance instance) {
+		return AxiomMinestom.getAxiomPlayers().stream()
+				.filter(player -> player.getInstance() == instance && hasAxiomPermission(player))
+				.toList();
 	}
 
 	private static boolean hasAxiomPermission(Player player) {

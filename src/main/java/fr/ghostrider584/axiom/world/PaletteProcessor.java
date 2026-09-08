@@ -4,9 +4,6 @@ import fr.ghostrider584.axiom.util.CompressedBlockEntity;
 import net.kyori.adventure.nbt.BinaryTag;
 import net.kyori.adventure.nbt.CompoundBinaryTag;
 import net.minestom.server.MinecraftServer;
-import net.minestom.server.coordinate.CoordConversion;
-import net.minestom.server.coordinate.Point;
-import net.minestom.server.coordinate.Vec;
 import net.minestom.server.instance.Chunk;
 import net.minestom.server.instance.Instance;
 import net.minestom.server.instance.block.Block;
@@ -17,7 +14,6 @@ import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import static net.minestom.server.network.NetworkBuffer.*;
 
@@ -27,11 +23,8 @@ public class PaletteProcessor {
 	private static final long SENTINEL_VALUE = 0b1000000000000000000000000010000000000000000000000000100000000000L;
 	private static final int EMPTY_BLOCK_STATE = Block.VOID_AIR.stateId();
 
-	private static final ThreadLocal<int[]> PALETTE_BUFFER = ThreadLocal.withInitial(() -> new int[4096]);
-
 	public static void processChunkData(NetworkBuffer buffer, boolean allowNbt, Instance instance) {
 		final long startTime = System.currentTimeMillis();
-		final var blockEntities = new HashMap<Point, BinaryTag>();
 
 		int sectionsProcessed = 0;
 
@@ -54,25 +47,20 @@ public class PaletteProcessor {
 				}
 
 				final var incomingPalette = buffer.read(Palette.BLOCK_SERIALIZER);
+				// Offsets are local to this section, never to the entire edit buffer.
+				final var blockEntities = new HashMap<Integer, CompoundBinaryTag>();
 
 				final int blockEntityCount = buffer.read(VAR_INT);
 				for (int i = 0; i < blockEntityCount; i++) {
 					final short offset = buffer.read(SHORT);
-					final int localX = (offset >> 8) & 0xF;
-					final int localY = offset & 0xF;
-					final int localZ = (offset >> 4) & 0xF;
-
-					final var pos = new Vec(
-							(sectionX << 4) + localX,
-							(sectionY << 4) + localY,
-							(sectionZ << 4) + localZ
-					);
-
 					final var nbt = parseCompressedBlockEntity(buffer);
-					blockEntities.put(pos, nbt);
+					// Always consume the wire payload, even without NBT-edit permission.
+					if (allowNbt && nbt instanceof CompoundBinaryTag compoundTag) {
+						blockEntities.put(offset & 0xFFF, compoundTag);
+					}
 				}
 
-				applyPaletteOptimized(chunk, sectionY, incomingPalette, blockEntities);
+				applyPalette(chunk, sectionY, incomingPalette, blockEntities, allowNbt);
 				sectionsProcessed++;
 
 				LOGGER.trace("Processed section [{}, {}, {}]", sectionX, sectionY, sectionZ);
@@ -90,88 +78,46 @@ public class PaletteProcessor {
 		}
 	}
 
-	private static void applyPaletteOptimized(Chunk chunk, int sectionY, Palette incomingPalette, Map<Point, BinaryTag> blockEntities) {
-		final var section = chunk.getSection(sectionY);
-
-		synchronized (chunk) {
+	private static void applyPalette(Chunk chunk, int sectionY, Palette incomingPalette,
+	                                 Map<Integer, CompoundBinaryTag> blockEntities, boolean allowNbt) {
+		chunk.lockWriteLock();
+		try {
 			if (!chunk.isLoaded()) {
 				LOGGER.warn("Attempted to modify unloaded chunk [{}, {}]", chunk.getChunkX(), chunk.getChunkZ());
 				return;
 			}
 
-			final int incomingCount = incomingPalette.count();
-			final int maxSize = section.blockPalette().maxSize(); // should be 4096 for a chunk
+			// Chunk.setBlock owns NBT entries, handlers, heightmaps and ticking state.
+			// Raw palette fill/copy leaves those side tables stale. Keep one correct
+			// write path for sparse and dense edits, skipping unchanged cells.
+			final boolean[] changed = {false};
+			incomingPalette.getAll((x, y, z, stateId) -> {
+				if (stateId == EMPTY_BLOCK_STATE) return; // VOID_AIR means "not edited".
+				final int worldX = (chunk.getChunkX() << 4) + x;
+				final int worldY = (sectionY << 4) + y;
+				final int worldZ = (chunk.getChunkZ() << 4) + z;
+				final var current = chunk.getBlock(worldX, worldY, worldZ);
+				var replacement = Block.fromStateId(stateId);
+				if (replacement == null) throw new IllegalArgumentException("Unknown block state: " + stateId);
+				if (allowNbt) {
+					replacement = replacement.withNbt(blockEntities.get((x << 8) | (z << 4) | y));
+				} else if (replacement.id() == current.id()) {
+					// A permitted block-state edit must not overwrite existing NBT.
+					replacement = current.withProperties(replacement.properties());
+				}
+				if (!replacement.equals(current)) {
+					chunk.setBlock(worldX, worldY, worldZ, replacement);
+					changed[0] = true;
+				}
+			});
 
-			// if incoming palette is effectively empty, do nothing
-			if (incomingCount == 0) {
-				return;
-			}
-
-			// if incoming palette is single value, fill the whole section
-			final int singleValue = incomingPalette.singleValue();
-			if (singleValue >= 0 && singleValue != EMPTY_BLOCK_STATE) {
-				chunk.invalidate();
-				section.blockPalette().fill(singleValue);
-				MinecraftServer.getSchedulerManager().scheduleNextTick(chunk::sendChunk);
-				return;
-			}
-
-			// if incoming palette is completely full, use bulk copy
-			if (incomingCount == maxSize) {
-				// Check if incoming palette has any EMPTY_BLOCK_STATE values
-				final var emptyCount = new AtomicInteger(0);
-				incomingPalette.getAll((x, y, z, value) -> {
-					if (value == EMPTY_BLOCK_STATE) {
-						emptyCount.incrementAndGet();
-					}
+			if (changed[0]) {
+				MinecraftServer.getSchedulerManager().scheduleNextTick(() -> {
+					if (chunk.isLoaded()) chunk.sendChunk();
 				});
-
-				if (emptyCount.get() == 0) {
-					// No empty blocks in incoming palette, safe to copy entirely
-					chunk.invalidate();
-					section.blockPalette().copyFrom(incomingPalette);
-					MinecraftServer.getSchedulerManager().scheduleNextTick(chunk::sendChunk);
-					return;
-				}
 			}
-
-			// pre-extract incoming palette values to avoid repeated get() calls
-			final int[] incomingValues = PALETTE_BUFFER.get();
-			incomingPalette.getAll((x, y, z, value) -> {
-				final int idx = (y << 8) | (z << 4) | x; // linear index
-				incomingValues[idx] = value;
-			});
-
-			chunk.invalidate();
-
-			// use bulk replacement
-			section.blockPalette().replaceAll((sx, sy, sz, currentStateId) -> {
-				final int linearIndex = (sy << 8) | (sz << 4) | sx;
-				final int newBlockState = incomingValues[linearIndex];
-
-				if (newBlockState != EMPTY_BLOCK_STATE) {
-					return newBlockState;
-				}
-				return currentStateId;
-			});
-
-			blockEntities.forEach((position, binaryTag) -> {
-				final int relativeX = CoordConversion.globalToSectionRelative(position.blockX());
-				final int relativeY = position.blockY();
-				final int relativeZ = CoordConversion.globalToSectionRelative(position.blockZ());
-
-				final int blockSectionY = CoordConversion.globalToSection(position.blockY());
-				if (blockSectionY == sectionY) {
-					final var currentBlock = chunk.getBlock(relativeX, relativeY, relativeZ);
-
-					if (binaryTag instanceof CompoundBinaryTag compoundTag && !compoundTag.keySet().isEmpty()) {
-						chunk.setBlock(relativeX, relativeY, relativeZ, currentBlock.withNbt(compoundTag));
-					}
-				}
-			});
-
-			MinecraftServer.getSchedulerManager().scheduleNextTick(chunk::sendChunk);
-			LOGGER.trace("Sent chunk update for [{}, {}]", chunk.getChunkX(), chunk.getChunkZ());
+		} finally {
+			chunk.unlockWriteLock();
 		}
 	}
 

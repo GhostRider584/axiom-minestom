@@ -13,7 +13,6 @@ import net.minestom.server.coordinate.Pos;
 import net.minestom.server.entity.Player;
 import net.minestom.server.event.EventDispatcher;
 import net.minestom.server.instance.Instance;
-import net.minestom.server.world.DimensionType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -44,7 +43,7 @@ public class TeleportHandler implements IncomingMessageHandler<TeleportMessage> 
 
 		final var unknownTeleportEvent = new AxiomUnknownTeleportEvent(player, packet.dimension(), targetPos);
 		EventDispatcher.callCancellable(unknownTeleportEvent, () -> {
-			final var targetInstance = resolveInstance(packet.dimension());
+			final var targetInstance = resolveInstance(currentInstance, packet.dimension());
 			if (targetInstance == null) {
 				LOGGER.warn("Could not resolve instance for dimension key: {}", packet.dimension());
 				return;
@@ -64,18 +63,22 @@ public class TeleportHandler implements IncomingMessageHandler<TeleportMessage> 
 		});
 	}
 
-	private Instance resolveInstance(Key dimensionKey) {
-		// TODO: handle instance resolution differently?
+	static Instance resolveInstance(Instance currentInstance, Key dimensionKey) {
+		// A dimension type is not a unique world identifier on a multi-game server.
+		if (dimensionKey.equals(currentInstance.getDimensionType().key())) return currentInstance;
+		Instance match = null;
 		final var instanceManager = MinecraftServer.getInstanceManager();
 		for (final var instance : instanceManager.getInstances()) {
 			final var instanceDimensionKey = instance.getDimensionType();
-			if (dimensionKey.compareTo(instanceDimensionKey.key()) == 0) {
-				return instance;
+			if (dimensionKey.equals(instanceDimensionKey.key())) {
+				if (match != null) {
+					LOGGER.warn("Ambiguous instance for dimension key {}; use AxiomUnknownTeleportEvent to route explicitly", dimensionKey);
+					return null;
+				}
+				match = instance;
 			}
 		}
-
-		LOGGER.error("Could not resolve instance for dimension key {}", dimensionKey);
-		return null;
+		return match;
 	}
 
 	private void performTeleport(Player player, Instance targetInstance, Pos targetPos) {
