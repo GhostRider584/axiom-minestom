@@ -1,0 +1,24 @@
+name: Verify Axiom
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: https://git.neo.smolder.fr/actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          persist-credentials: false
+      - uses: https://git.neo.smolder.fr/actions/setup-java@c1e323688fd81a25caa38c78aa6df2d33d3e20d9
+        with:
+          distribution: temurin
+          java-version: '25'
+      - name: Build and test public source
+        run: |
+          chmod +x gradlew
+          ./gradlew build --no-daemon --max-workers=2 --no-parallel

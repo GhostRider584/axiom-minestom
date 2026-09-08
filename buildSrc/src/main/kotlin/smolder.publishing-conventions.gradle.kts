@@ -15,8 +15,10 @@ tasks {
     }
 }
 
-var smolderUsername: String? = findProperty("smolderUsername") as String?
-var smolderPassword: String? = findProperty("smolderPassword") as String?
+val smolderUsername = providers.environmentVariable("SMOLDER_MAVEN_USERNAME")
+    .orElse(providers.gradleProperty("smolderUsername")).orNull
+val smolderPassword = providers.environmentVariable("SMOLDER_MAVEN_TOKEN")
+    .orElse(providers.gradleProperty("smolderPassword")).orNull
 val publicRepository: String by project
 
 publishing {

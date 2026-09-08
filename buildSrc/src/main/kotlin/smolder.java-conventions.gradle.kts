@@ -8,7 +8,6 @@ var smolderPassword: String? = findProperty("smolderPassword") as String?
 val publicRepository: String by project
 
 repositories {
-    mavenLocal()
     mavenCentral()
 
     maven(publicRepository) {
