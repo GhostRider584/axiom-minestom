@@ -27,9 +27,12 @@ public record SetBufferMessage(
 			final var bufferUuid = buffer.read(UUID);
 			final byte bufferType = buffer.read(BYTE);
 
-			// TODO: handle the data here instead of in SetBufferHandler
+			if (bufferType != 0 && bufferType != 1) throw new IllegalArgumentException("Unsupported edit buffer type");
+			if (buffer.readableBytes() > fr.ghostrider584.axiom.world.EditBufferDecoder.MAX_WIRE_BYTES)
+				throw new IllegalArgumentException("Edit buffer exceeds the wire budget");
+			// The bounded copy belongs to the asynchronous decoder, not the packet event.
 			final int remainingBytes = (int) buffer.readableBytes();
-			final byte[] remainingData = new byte[(int) remainingBytes];
+			final byte[] remainingData = new byte[remainingBytes];
 			buffer.copyTo(buffer.readIndex(), remainingData, 0, remainingBytes);
 			buffer.advanceRead(remainingBytes);
 

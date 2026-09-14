@@ -15,7 +15,7 @@ import java.util.Map;
 import static net.minestom.server.network.NetworkBuffer.*;
 import static org.junit.jupiter.api.Assertions.*;
 
-class PaletteProcessorTest {
+class EditBufferApplicationTest {
     private InstanceContainer instance;
     private static final int OFFSET = (1 << 8) | (3 << 4) | 2;
     private static final CompoundBinaryTag DATA = CompoundBinaryTag.builder().putString("owner", "A").build();
@@ -32,7 +32,7 @@ class PaletteProcessorTest {
         writeSection(buffer, -1, 0, -1, sparseChest(), Map.of(OFFSET, DATA));
         writeSection(buffer, 0, 0, -1, sparseChest(), Map.of());
         writeSection(buffer, -1, 1, -1, sparseChest(), Map.of());
-        PaletteProcessor.processChunkData(buffer, true, instance);
+        process(buffer, true);
         assertEquals(DATA, instance.getBlock(-15, 2, -13).nbt());
         assertNull(instance.getBlock(1, 2, -13).nbt());
         assertNull(instance.getBlock(-15, 18, -13).nbt());
@@ -78,7 +78,7 @@ class PaletteProcessorTest {
         var forbidden = CompoundBinaryTag.builder().putString("owner", "forbidden").build();
         writeSection(buffer, 0, 0, 0, sparseChest(), Map.of(OFFSET, forbidden));
         writeSection(buffer, 1, 0, 0, sparseChest(), Map.of(OFFSET, forbidden));
-        PaletteProcessor.processChunkData(buffer, false, instance);
+        process(buffer, false);
         assertEquals(DATA, instance.getBlock(1, 2, 3).nbt());
         assertEquals(Block.CHEST, instance.getBlock(17, 2, 3));
         assertEquals(0, buffer.readableBytes());
@@ -97,7 +97,18 @@ class PaletteProcessorTest {
     private void apply(Palette palette, boolean allowNbt, Map<Integer, CompoundBinaryTag> nbt) throws IOException {
         var buffer = NetworkBuffer.resizableBuffer();
         writeSection(buffer, 0, 0, 0, palette, nbt);
-        PaletteProcessor.processChunkData(buffer, allowNbt, instance);
+        process(buffer, allowNbt);
+    }
+
+    private void process(NetworkBuffer buffer, boolean allowNbt) {
+        buffer.write(LONG, EditBufferDecoder.SENTINEL);
+        buffer.write(VAR_INT, 0);
+        var batch = EditBufferDecoder.decode(buffer, (byte) 0);
+        var ticks = new java.util.ArrayDeque<Runnable>();
+        var done = new ScheduledEditTarget(ticks::add).apply(
+                new EditTarget.Request(null, instance, () -> true, allowNbt, null), batch).toCompletableFuture();
+        while (!ticks.isEmpty()) ticks.remove().run();
+        done.join();
     }
 
     private static Palette sparseChest() {

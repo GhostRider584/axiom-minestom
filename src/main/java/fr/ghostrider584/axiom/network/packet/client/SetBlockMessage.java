@@ -42,20 +42,26 @@ public record SetBlockMessage(
 		@Override
 		public @NotNull SetBlockMessage read(@NotNull NetworkBuffer buffer) {
 			final int blocksSize = buffer.read(VAR_INT);
+			if (blocksSize < 0 || blocksSize > 4096) throw new IllegalArgumentException("Too many single-block edits");
 
 			final var blocks = new LinkedHashMap<Point, Block>(blocksSize);
 			for (int i = 0; i < blocksSize; i++) {
 				final var pos = buffer.read(BLOCK_POSITION);
-				final int stateId = buffer.read(VAR_INT);
-				final var block = Block.fromStateId((short) stateId);
-				blocks.put(pos, block);
+				final int stateId = fr.ghostrider584.axiom.world.EditBufferDecoder.state(buffer.read(VAR_INT));
+				final var block = Block.fromStateId(stateId);
+				if (block == null) throw new IllegalArgumentException("Unknown block state: " + stateId);
+				if (blocks.put(pos, block) != null) throw new IllegalArgumentException("Duplicate block position");
 			}
 
 			final boolean updateNeighbors = buffer.read(BOOLEAN);
 
 			Set<Point> preventUpdatesAt = Set.of();
 			if (updateNeighbors) {
-				preventUpdatesAt = buffer.read(BLOCK_POSITION.set());
+				int count = buffer.read(VAR_INT);
+				if (count < 0 || count > 4096) throw new IllegalArgumentException("Too many update exclusions");
+				var positions = new java.util.HashSet<Point>();
+				for (int i = 0; i < count; i++) positions.add(buffer.read(BLOCK_POSITION));
+				preventUpdatesAt = positions;
 			}
 
 			final int reason = buffer.read(VAR_INT);

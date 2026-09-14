@@ -34,6 +34,11 @@ public class AxiomMessageRegistry {
 			.addListener(PlayerPluginMessageEvent.class, this::handlePluginMessage);
 
 	private final ChannelRegistrationManager channelRegistrationManager;
+	private final fr.ghostrider584.axiom.network.channel.TunnelAssembler<Player> tunnel = new fr.ghostrider584.axiom.network.channel.TunnelAssembler<>();
+	private final java.util.concurrent.Semaphore tunnelBudget = new java.util.concurrent.Semaphore(4);
+	private final java.util.concurrent.ExecutorService tunnelDecoder = new java.util.concurrent.ThreadPoolExecutor(
+			1, 1, 0, java.util.concurrent.TimeUnit.SECONDS, new java.util.concurrent.ArrayBlockingQueue<>(4),
+			Thread.ofPlatform().daemon().name("axiom-tunnel-", 0).factory(), new java.util.concurrent.ThreadPoolExecutor.AbortPolicy());
 
 	public AxiomMessageRegistry(ChannelRegistrationManager channelRegistrationManager) {
 		this.channelRegistrationManager = channelRegistrationManager;
@@ -45,6 +50,13 @@ public class AxiomMessageRegistry {
 
 	public void detach(EventNode<@NotNull Event> eventNode) {
 		eventNode.removeChild(this.eventNode);
+		tunnel.clear();
+	}
+	public void clearPending(Player player) { tunnel.clear(player); }
+	public List<String> incomingChannels() {
+		var result = new ArrayList<String>();
+		channels.forEach((name, registration) -> { if (registration.hasIncoming()) result.add(name); });
+		result.add("axiom:tunnel"); result.sort(String::compareTo); return List.copyOf(result);
 	}
 
 	public <T extends ClientPacket> void registerIncoming(String channel,
@@ -101,8 +113,40 @@ public class AxiomMessageRegistry {
 			return;
 		}
 
+		if (identifier.equals("axiom:tunnel")) { handleTunnel(event.getPlayer(), event.getMessage()); return; }
 		final var buffer = NetworkBuffer.wrap(event.getMessage(), 0, event.getMessage().length);
 		handleIncomingPacket(event.getPlayer(), identifier, buffer);
+	}
+
+	private void handleTunnel(Player player, byte[] bytes) {
+		try {
+			if (!fr.ghostrider584.axiom.AxiomMinestom.isAxiomPlayer(player)
+					|| !fr.ghostrider584.axiom.world.AxiomEdits.allowsChannel(player, "axiom:tunnel"))
+				throw new IllegalStateException("Axiom tunnel is not authorized");
+			byte[] assembled = tunnel.accept(player, bytes);
+			if (assembled == null) return;
+			var current = fr.ghostrider584.axiom.world.AxiomEdits.captureSession(player);
+			if (!tunnelBudget.tryAcquire()) throw new IllegalStateException("Axiom tunnel is busy");
+			try {
+				tunnelDecoder.execute(() -> {
+					try {
+						var packet = fr.ghostrider584.axiom.network.channel.TunnelAssembler.decode(assembled);
+						net.minestom.server.MinecraftServer.getSchedulerManager().scheduleNextTick(() -> {
+							try {
+								if (!current.getAsBoolean()) throw new IllegalStateException("Axiom session changed during packet decode");
+								handleIncomingPacket(player, packet.channel(), NetworkBuffer.wrap(packet.payload(), 0, packet.payload().length));
+							} catch (Exception e) { reportFailure(player, e); }
+							finally { tunnelBudget.release(); }
+						});
+					} catch (Exception e) { tunnelBudget.release(); reportFailure(player, e); }
+				});
+			} catch (Exception e) { tunnelBudget.release(); throw e; }
+		} catch (Exception e) { reportFailure(player, e); }
+	}
+	private void reportFailure(Player player, Exception failure) {
+		logger.warn("Axiom request rejected for {}: {}", player.getUsername(), failure.getMessage());
+		player.sendMessage(net.kyori.adventure.text.Component.text("Axiom request rejected: " + failure.getMessage(),
+				net.kyori.adventure.text.format.NamedTextColor.RED));
 	}
 
 	@SuppressWarnings("unchecked")
@@ -116,13 +160,20 @@ public class AxiomMessageRegistry {
 		}
 
 		try {
+			if (!channel.equals("axiom:hello") && !fr.ghostrider584.axiom.AxiomMinestom.isAxiomPlayer(player))
+				throw new IllegalStateException("Complete the Axiom handshake before using editing tools");
+			if (!fr.ghostrider584.axiom.world.AxiomEdits.allowsChannel(player, channel))
+				throw new IllegalStateException("This Axiom operation is not allowed in the current workspace");
+			if (buffer.readableBytes() > fr.ghostrider584.axiom.world.EditBufferDecoder.MAX_WIRE_BYTES + 512)
+				throw new IllegalArgumentException("Axiom request exceeds the wire budget");
 			final var incoming = registration.incoming();
 			Objects.requireNonNull(incoming, "Incoming registration cannot be null");
 
 			final var packet = incoming.serializer().read(buffer);
+			if (buffer.readableBytes() != 0) throw new IllegalArgumentException("Trailing Axiom packet data");
 			((IncomingMessageHandler<ClientPacket>) incoming.handler()).handle(player, channel, packet);
 		} catch (Exception e) {
-			logger.error("Error handling packet from channel {} for player {}: {}", channel, player.getUsername(), e.getMessage(), e);
+			reportFailure(player, e);
 		}
 	}
 
@@ -168,6 +219,8 @@ public class AxiomMessageRegistry {
 
 	public static AxiomMessageRegistry defaultRegistry(ChannelRegistrationManager channelRegistrationManager) {
 		final var registry = new AxiomMessageRegistry(channelRegistrationManager);
+		channelRegistrationManager.registerServerChannel("axiom:tunnel");
+		channelRegistrationManager.registerServerChannel("axiom:goodbye");
 
 		// outgoing messages
 		registry.registerOutgoing(AxiomPluginChannel.Server.ENABLE, EnableMessage.class, EnableMessage.TYPE);

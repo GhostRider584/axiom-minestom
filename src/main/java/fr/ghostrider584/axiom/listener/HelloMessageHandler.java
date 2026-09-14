@@ -20,10 +20,20 @@ public class HelloMessageHandler implements IncomingMessageHandler<HelloMessage>
 	public void handle(Player player, String channel, HelloMessage packet) {
 		final var instance = player.getInstance();
 
-		AxiomMinestom.messageRegistry().send(player, new EnableMessage(true, ServerFlag.MAX_PACKET_SIZE, 2, 0, 0));
+		if (instance == null || !fr.ghostrider584.axiom.network.channel.AxiomHandshake.accept(player, packet)) {
+			AxiomMinestom.unregisterAxiomPlayer(player);
+			player.sendPluginMessage("axiom:goodbye", net.minestom.server.network.NetworkBuffer.makeArray(
+					net.minestom.server.network.NetworkBuffer.STRING,
+					"This server requires Axiom API 10 for the exact Minecraft server version; handshake rejected."));
+			player.sendMessage(Component.text("Axiom handshake rejected: use a compatible API 10 client for this Minecraft version.", NamedTextColor.RED));
+			return;
+		}
+		AxiomMinestom.messageRegistry().send(player, new EnableMessage(true, AxiomMinestom.messageRegistry().incomingChannels()));
 		RestrictionsManager.sendPermissionBasedRestrictions(player);
 
 		AxiomMinestom.registerAxiomPlayer(player);
+		fr.ghostrider584.axiom.block.CustomBlockCatalogues.refresh(player);
+		fr.ghostrider584.axiom.dispatch.DispatchSendsManager.sendUpdateAvailableDispatchSends(player, 1, 1);
 		MarkerManager.onPlayerJoinInstance(player, instance);
 
 		final var annotationRegistry = AxiomMinestom.annotationRegistry();

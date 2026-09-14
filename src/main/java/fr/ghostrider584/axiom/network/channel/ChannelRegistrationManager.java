@@ -65,6 +65,7 @@ public final class ChannelRegistrationManager {
 		if (event.isFirstSpawn()) {
 			sendServerChannels(event.getPlayer());
 		}
+		AxiomHandshake.begin(event.getPlayer());
 	}
 
 	private void handlePluginMessage(PlayerPluginMessageEvent event) {
@@ -89,6 +90,7 @@ public final class ChannelRegistrationManager {
 			if (changed) {
 				logger.debug("Player {} registered channels: {}", player.getUsername(), channels);
 			}
+			AxiomHandshake.begin(player);
 		} else {
 			changed = playerRegistry.unregisterChannels(player, channels);
 			if (changed) {

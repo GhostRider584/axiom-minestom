@@ -9,13 +9,15 @@ import static net.minestom.server.network.NetworkBuffer.*;
 public record HelloMessage(
 		int apiVersion,
 		int dataVersion,
-		int protocolVersion
+		int protocolVersion,
+		long handshakeId
 ) implements ClientPacket.Play {
 
 	public static final NetworkBuffer.Type<HelloMessage> TYPE = NetworkBufferTemplate.template(
 			VAR_INT, HelloMessage::apiVersion,
 			VAR_INT, HelloMessage::dataVersion,
 			VAR_INT, HelloMessage::protocolVersion,
+			LONG, HelloMessage::handshakeId,
 			HelloMessage::new
 	);
 }
