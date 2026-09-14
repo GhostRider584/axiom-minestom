@@ -28,11 +28,26 @@ class CustomBlockCatalogueTest {
     }
     @Test void rejectsWrongProductsCollidingCarriersAndInvalidTransforms() {
         int a = Block.STONE.stateId(), b = Block.DIRT.stateId();
-        var property = new CustomBlockDefinition.Property("axis", List.of("x", "y"));
+        var property = CustomBlockDefinition.Property.strings("axis", List.of("x", "y"));
         assertThrows(IllegalArgumentException.class, () -> definition(null, List.of(a), List.of(property), Map.of()));
         assertThrows(IllegalArgumentException.class, () -> definition(null, List.of(a, b), List.of(property), Map.of(a, b)));
         var valid = definition(null, List.of(a), List.of(), Map.of());
         assertThrows(IllegalArgumentException.class, () -> new CustomBlockCatalogue(java.util.UUID.randomUUID(), List.of(valid, valid)));
+    }
+    @Test void builtInPropertiesUseOnlyTheirWireDiscriminatorAndCanonicalValueOrder() {
+        var property = CustomBlockDefinition.Property.builtin(CustomBlockDefinition.PropertyKind.AXIS);
+        var states = List.of(Block.STONE.stateId(), Block.DIRT.stateId(), Block.GRASS_BLOCK.stateId());
+        var definition = definition(null, states, List.of(property), Map.of());
+        byte[] data = NetworkBuffer.makeArray(definition::write);
+        var buffer = NetworkBuffer.wrap(data, 0, data.length);
+        buffer.read(STRING); buffer.read(STRING);
+        assertEquals(1, buffer.read(VAR_INT));
+        assertEquals((byte) 3, buffer.read(BYTE));
+        assertEquals(states, buffer.read(VAR_INT.list()));
+        assertEquals(List.of("x", "y", "z"), property.values());
+        assertThrows(IllegalArgumentException.class, () -> new CustomBlockDefinition.Property("axis",
+                List.of("z", "x", "y"), CustomBlockDefinition.PropertyKind.AXIS));
+        assertThrows(IllegalArgumentException.class, () -> CustomBlockDefinition.Property.builtin(CustomBlockDefinition.PropertyKind.STRINGS));
     }
     private static CustomBlockDefinition definition(ItemStack item, List<Integer> states,
                                                     List<CustomBlockDefinition.Property> properties, Map<Integer, Integer> rotate) {

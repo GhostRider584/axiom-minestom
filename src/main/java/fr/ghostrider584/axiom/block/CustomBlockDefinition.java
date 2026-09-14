@@ -12,12 +12,29 @@ public record CustomBlockDefinition(Key id, String translationKey, List<Property
                                     ItemStack pickItem, Set<Placement> placement, Map<Integer, Integer> rotateY,
                                     Map<Integer, Integer> flipX, Map<Integer, Integer> flipY, Map<Integer, Integer> flipZ) {
     /** State list uses the Cartesian product in this property/value order (last property varies fastest). */
-    public record Property(String name, List<String> values) {
+    public enum PropertyKind {
+        STRINGS(2, null, List.of()), AXIS(3, "axis", List.of("x", "y", "z")),
+        HORIZONTAL_AXIS(4, "axis", List.of("x", "z")),
+        FACING(5, "facing", List.of("north", "east", "south", "west", "up", "down")),
+        HORIZONTAL_FACING(6, "facing", List.of("north", "east", "south", "west")),
+        HALF(14, "half", List.of("bottom", "top"));
+        final int wire; final String propertyName; final List<String> values;
+        PropertyKind(int wire, String propertyName, List<String> values) { this.wire = wire; this.propertyName = propertyName; this.values = values; }
+    }
+    public record Property(String name, List<String> values, PropertyKind kind) {
         public Property {
+            Objects.requireNonNull(kind);
             values = List.copyOf(values);
             if (!name.matches("[a-z0-9_]+") || values.isEmpty() || values.size() > 256 || new HashSet<>(values).size() != values.size()
                     || values.stream().anyMatch(value -> !value.matches("[a-z0-9_.-]+")))
                 throw new IllegalArgumentException("Invalid finite custom property");
+            if (kind != PropertyKind.STRINGS && (!name.equals(kind.propertyName) || !values.equals(kind.values)))
+                throw new IllegalArgumentException("Built-in property must use the wire-defined name/value order");
+        }
+        public static Property strings(String name, List<String> values) { return new Property(name, values, PropertyKind.STRINGS); }
+        public static Property builtin(PropertyKind kind) {
+            if (kind == PropertyKind.STRINGS) throw new IllegalArgumentException("Strings require an explicit name and values");
+            return new Property(kind.propertyName, kind.values, kind);
         }
     }
     public enum Placement {
@@ -56,8 +73,10 @@ public record CustomBlockDefinition(Key id, String translationKey, List<Property
         buffer.write(STRING, id.asString()); buffer.write(STRING, translationKey);
         buffer.write(VAR_INT, properties.size());
         for (Property property : properties) {
-            buffer.write(BYTE, (byte) 2); buffer.write(STRING, property.name());
-            buffer.write(STRING.list(), property.values());
+            buffer.write(BYTE, (byte) property.kind().wire);
+            if (property.kind() == PropertyKind.STRINGS) {
+                buffer.write(STRING, property.name()); buffer.write(STRING.list(), property.values());
+            }
         }
         buffer.write(VAR_INT.list(), states);
         buffer.write(BOOLEAN, pickItem != null);
