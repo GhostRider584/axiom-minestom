@@ -75,7 +75,7 @@ public class JsonAnnotationStorage implements AnnotationStorage {
 		}
 	}
 
-	private static Gson createGson() {
+	static Gson createGson() {
 		return new GsonBuilder()
 				.setPrettyPrinting()
 				.registerTypeAdapter(AnnotationData.class, new AnnotationDataAdapter())

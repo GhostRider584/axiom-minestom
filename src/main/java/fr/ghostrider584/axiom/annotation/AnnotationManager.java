@@ -35,6 +35,11 @@ public class AnnotationManager {
 		return new AnnotationManager(instance.getUuid(), storage, config);
 	}
 
+	/** A stable authoring identity may differ from the live instance's UUID. */
+	public static AnnotationManager create(UUID worldId, AnnotationStorage storage, AnnotationConfig config) {
+		return new AnnotationManager(worldId, storage, config);
+	}
+
 	private void loadAnnotations() {
 		if (storage != null) {
 			annotations.putAll(storage.loadAnnotations(worldId));
@@ -42,7 +47,7 @@ public class AnnotationManager {
 		}
 	}
 
-	public void sendAllAnnotations(Player player) {
+	public synchronized void sendAllAnnotations(Player player) {
 		if (!config.enabled() || !AxiomPermissions.hasPermission(player, AxiomPermission.ANNOTATION)) {
 			return;
 		}
@@ -54,30 +59,34 @@ public class AnnotationManager {
 			actions.add(new CreateAnnotation(entry.getKey(), entry.getValue()));
 		}
 
-		final var response = new AnnotationUpdateResponse(actions);
-		AxiomMinestom.messageRegistry().send(player, response);
+		// Clear plus a full world can exceed the protocol's 256-action packet limit.
+		for (int first = 0; first < actions.size(); first += 256) {
+			AxiomMinestom.messageRegistry().send(player,
+					new AnnotationUpdateResponse(actions.subList(first, Math.min(first + 256, actions.size()))));
+		}
 
 		LOGGER.trace("Sent {} annotations to player {} in world {}",
 				annotations.size(), player.getUsername(), worldId);
 	}
 
-	public void handleUpdates(List<AnnotationUpdateAction> actions, Player requester, Instance instance) {
+	public synchronized void handleUpdates(List<AnnotationUpdateAction> actions, Player requester, Instance instance) {
 		if (!config.enabled()) {
 			return;
 		}
 
-		boolean changed = false;
-		for (final var action : actions) {
-			if (processAction(action, requester)) {
-				changed = true;
-			}
+		if (actions.size() > 256) throw new IllegalArgumentException("Too many annotation actions");
+		var previous = new LinkedHashMap<>(annotations);
+		boolean wasDirty = dirty;
+		var accepted = new ArrayList<AnnotationUpdateAction>();
+		try {
+			for (var action : actions) if (processAction(action, requester)) accepted.add(action);
+			if (!accepted.isEmpty()) { markDirty(); save(); }
+		} catch (RuntimeException error) {
+			annotations.clear(); annotations.putAll(previous); dirty = wasDirty;
+			throw error;
 		}
-
-		if (changed) {
-			markDirty();
-			broadcastToPlayers(actions, instance);
-			save();
-		}
+		// Never broadcast denied operations or a mutation rejected by the host's bounded store.
+		if (!accepted.isEmpty()) broadcastToPlayers(accepted, instance);
 	}
 
 	private boolean processAction(AnnotationUpdateAction action, Player player) {
@@ -96,10 +105,8 @@ public class AnnotationManager {
 			return false;
 		}
 
-		if (annotations.size() >= config.maxAnnotationsPerWorld()) {
-			LOGGER.warn("Player {} tried to create annotation but world {} is at limit ({})",
-					player.getUsername(), worldId, config.maxAnnotationsPerWorld());
-			return false;
+		if (!annotations.containsKey(create.uuid()) && annotations.size() >= config.maxAnnotationsPerWorld()) {
+			throw new IllegalArgumentException("This world has reached its annotation limit (" + config.maxAnnotationsPerWorld() + ")");
 		}
 
 		annotations.put(create.uuid(), create.annotationData());
@@ -122,6 +129,7 @@ public class AnnotationManager {
 		final var annotation = annotations.get(move.uuid());
 		if (annotation != null) {
 			final var movedAnnotation = annotation.withPosition(move.to());
+			if (movedAnnotation == null) return false;
 			annotations.put(move.uuid(), movedAnnotation);
 			return true;
 		}
@@ -136,6 +144,7 @@ public class AnnotationManager {
 		final var annotation = annotations.get(rotate.uuid());
 		if (annotation != null) {
 			final var movedAnnotation = annotation.withRotation(rotate.to());
+			if (movedAnnotation == null) return false;
 			annotations.put(rotate.uuid(), movedAnnotation);
 			return true;
 		}
@@ -173,7 +182,7 @@ public class AnnotationManager {
 		this.dirty = true;
 	}
 
-	public void save() {
+	public synchronized void save() {
 		if (dirty && storage != null) {
 			storage.saveAnnotations(worldId, new HashMap<>(annotations));
 			dirty = false;
@@ -181,12 +190,12 @@ public class AnnotationManager {
 		}
 	}
 
-	public void cleanup() {
+	public synchronized void cleanup() {
 		save();
 		annotations.clear();
 	}
 
-	public int getAnnotationCount() {
+	public synchronized int getAnnotationCount() {
 		return annotations.size();
 	}
 

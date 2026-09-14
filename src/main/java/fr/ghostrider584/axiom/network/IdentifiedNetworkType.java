@@ -15,6 +15,14 @@ public interface IdentifiedNetworkType<T> {
 		public static <T> NetworkTypeEntry<T> entry(int id, Class<T> type, NetworkBuffer.Type<T> networkType) {
 			return new NetworkTypeEntry<>((byte) id, type, networkType);
 		}
+
+		/** Break the interface/default-method -> enum -> concrete static TYPE initialization cycle. */
+		public static <T> NetworkTypeEntry<T> lazyEntry(int id, Class<T> type, java.util.function.Supplier<NetworkBuffer.Type<T>> codec) {
+			return entry(id, type, new NetworkBuffer.Type<>() {
+				@Override public void write(@NotNull NetworkBuffer buffer, @NotNull T value) { buffer.write(codec.get(), value); }
+				@Override public @NotNull T read(@NotNull NetworkBuffer buffer) { return buffer.read(codec.get()); }
+			});
+		}
 	}
 
 	static <E extends IdentifiedNetworkType<T>, T> @Nullable NetworkTypeEntry<? extends T> findById(E[] values, byte id) {

@@ -37,6 +37,12 @@ public class AnnotationRegistry {
 		return managers.get(instance.getUuid());
 	}
 
+	/** Install a host-owned, preloaded manager before a world admits clients. Never overwrites one. */
+	public void bind(Instance instance, AnnotationManager manager) {
+		if (managers.putIfAbsent(instance.getUuid(), java.util.Objects.requireNonNull(manager)) != null)
+			throw new IllegalStateException("Annotations are already bound for this instance");
+	}
+
 	public void remove(Instance instance) {
 		final var manager = managers.remove(instance.getUuid());
 		if (manager != null) {

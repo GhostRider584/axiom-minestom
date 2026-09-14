@@ -33,6 +33,9 @@ public class UpdateAnnotationHandler implements IncomingMessageHandler<UpdateAnn
 		}
 
 		try {
+			var event = new fr.ghostrider584.axiom.event.AxiomAnnotationUpdateEvent(player, packet.actions());
+			net.minestom.server.event.EventDispatcher.call(event);
+			if (event.isCancelled()) return;
 			final var annotationManager = annotationRegistry.getOrCreate(instance);
 			annotationManager.handleUpdates(packet.actions(), player, instance);
 

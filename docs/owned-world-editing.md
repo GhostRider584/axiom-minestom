@@ -72,11 +72,32 @@ not belong in this state-backed palette; protect and edit them through their log
 
 ## Verification status
 
-27 local tests pass: existing channel/marker/teleport behavior, terrain/NBT regression cases,
+30 local tests pass: existing channel/marker/teleport behavior, terrain/NBT regression cases,
 strict malformed/budget checks, biome coordinate decoding, bounded application cancellation,
 captured session and permission revocation, cancellation-shielded admission, tunnel reassembly
-and expansion limits, API 10 nonce/layout, and custom-block item/transform encoding.
+and expansion limits, API 10 nonce/layout, custom-block item/transform encoding and bounded
+polymorphic annotation round-trips (including annotation-first static initialization).
 
 Still required before activation: real API 10 client handshake, property Cartesian ordering,
 custom palette/pick/rotate/mirror/copy/undo, fragment backpressure across large pastes, and host
 integration. No release, deployment, or Paper retirement is implied by these local tests.
+
+## Owned annotations
+
+`AxiomAnnotationUpdateEvent` is cancellable before ordinary annotation storage is selected.
+An owned host cancels it, captures the player/world/session, and applies its actions through its
+serialized mutation queue with permission and pack checks repeated at execution. Merely installing
+an annotation store does not serialize network mutations.
+
+Preload `AnnotationManager.create(stableWorldId, storage, config)` off tick, then `bind` it to the
+live instance through `AnnotationRegistry` before admitting players. The registry will not replace
+an existing manager. Remove that binding after the host's final flush. The host store must propagate
+validation errors: rejected batches restore the manager's prior state and are not broadcast.
+Unsupported transforms leave their objects unchanged. Full-world sends respect the 256-action
+packet limit, including the initial clear action.
+
+`AnnotationJsonCodec` preserves every wire annotation type with an explicit discriminator, validates
+required wire fields and finite numbers, and bounds counts and aggregate encoded size. Unknown or
+malformed data fails visibly; it does not turn into an empty map. A host may buffer accepted snapshots
+and flush them on its existing bounded I/O worker. Axiom's ordinary per-instance JSON storage is
+not a durable workspace lifecycle implementation and must not be used as a workspace fallback.
