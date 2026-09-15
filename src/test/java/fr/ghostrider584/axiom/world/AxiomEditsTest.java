@@ -46,12 +46,61 @@ class AxiomEditsTest {
         AxiomPermissions.setPermissionPredicate((_, permission) -> permission != AxiomPermission.BUILD_NBT || allowNbt.get());
         AxiomEdits.setTargetResolver((_, _) -> (request, _) -> { captured.complete(request); return pending; });
         var observer = AxiomEdits.submit(player, empty("minecraft:overworld")).toCompletableFuture();
+        var queued = new java.util.ArrayList<CompletableFuture<Void>>();
         try {
             var request = captured.get(3, TimeUnit.SECONDS);
             observer.cancel(false);
+            for (int i = 1; i < AxiomEdits.MAX_PER_PLAYER; i++)
+                queued.add(AxiomEdits.submit(player, empty("minecraft:overworld")).toCompletableFuture());
             assertThrows(CompletionException.class, () -> AxiomEdits.submit(player, empty("minecraft:overworld")).toCompletableFuture().join());
             allowNbt.set(false);
             assertThrows(IllegalStateException.class, request::requireCurrent);
+        } finally {
+            AxiomEdits.invalidate(player);
+            pending.complete(null);
+            CompletableFuture.allOf(queued.toArray(CompletableFuture[]::new)).handle((_, _) -> null).get(3, TimeUnit.SECONDS);
+            AxiomMinestom.unregisterAxiomPlayer(player);
+        }
+    }
+    @Test void rapidEditsAreAppliedInArrivalOrderAndFailureDoesNotStrandTheQueue() throws Exception {
+        var player = player(); var started = new java.util.LinkedHashMap<Integer, CompletableFuture<Void>>();
+        var applied = new LinkedBlockingQueue<Integer>();
+        var sequence = new AtomicInteger();
+        AxiomEdits.setTargetResolver((_, _) -> {
+            int id = sequence.getAndIncrement();
+            var result = new CompletableFuture<Void>(); started.put(id, result);
+            return (_, _) -> { applied.add(id); return result; };
+        });
+        var results = new java.util.ArrayList<CompletableFuture<Void>>();
+        try {
+            for (int i = 0; i < 12; i++) results.add(AxiomEdits.submit(player, empty("minecraft:overworld")).toCompletableFuture());
+            for (int i = 0; i < 12; i++) {
+                assertEquals(i, applied.poll(3, TimeUnit.SECONDS));
+                assertTrue(applied.isEmpty(), "A later edit must wait for actual application, not only decoding");
+                if (i == 3) started.get(i).completeExceptionally(new IllegalStateException("edit rejected"));
+                else started.get(i).complete(null);
+            }
+            for (int i = 0; i < 12; i++) {
+                if (i == 3) assertThrows(ExecutionException.class, () -> results.get(3).get(3, TimeUnit.SECONDS));
+                else results.get(i).get(3, TimeUnit.SECONDS);
+            }
+        } finally {
+            AxiomEdits.invalidate(player); started.values().forEach(f -> f.complete(null));
+            CompletableFuture.allOf(results.toArray(CompletableFuture[]::new)).handle((_, _) -> null).get(3, TimeUnit.SECONDS);
+            AxiomMinestom.unregisterAxiomPlayer(player);
+        }
+    }
+    @Test void queuedEditsCannotFollowAPlayerBackIntoAnOldWorld() throws Exception {
+        var player = player(); var calls = new AtomicInteger(); var ready = new CompletableFuture<Void>();
+        var pending = new CompletableFuture<Void>();
+        AxiomEdits.setTargetResolver((_, _) -> (_, _) -> { calls.incrementAndGet(); ready.complete(null); return pending; });
+        var first = AxiomEdits.submit(player, empty("minecraft:overworld")).toCompletableFuture();
+        var second = AxiomEdits.submit(player, empty("minecraft:overworld")).toCompletableFuture();
+        try {
+            ready.get(3, TimeUnit.SECONDS); AxiomEdits.invalidate(player); pending.complete(null);
+            first.get(3, TimeUnit.SECONDS);
+            assertThrows(ExecutionException.class, () -> second.get(3, TimeUnit.SECONDS));
+            assertEquals(1, calls.get());
         } finally { pending.complete(null); AxiomMinestom.unregisterAxiomPlayer(player); }
     }
     @Test void rejectsWrongWorldOrMissingPermissionBeforeCallingTarget() {
