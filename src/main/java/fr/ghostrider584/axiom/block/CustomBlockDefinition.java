@@ -81,7 +81,7 @@ public record CustomBlockDefinition(Key id, String translationKey, List<Property
         buffer.write(VAR_INT.list(), states);
         buffer.write(BOOLEAN, pickItem != null);
         if (pickItem != null) buffer.write(ItemStack.NETWORK_TYPE, pickItem);
-        buffer.write(BOOLEAN, true); // server pick-block where supported
+        buffer.write(BOOLEAN, false); // use the supplied logical item; no server pick-block handler is installed
         buffer.write(BOOLEAN, true); // no vanilla carrier interaction
         buffer.write(BOOLEAN, true); // no vanilla carrier shape updates
         var orderedPlacement = placement.stream().sorted().toList();

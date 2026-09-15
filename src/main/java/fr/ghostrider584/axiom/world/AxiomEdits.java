@@ -109,6 +109,24 @@ public final class AxiomEdits {
             synchronized (QUEUES) {
                 var queue = QUEUES.get(player);
                 if (queue == null || queue.peekFirst() != this) return;
+                // Axiom carries vanilla prediction sequence IDs. Acknowledge only after
+                // this FIFO head really settled, never when it was merely admitted.
+                try {
+                    var single = request.singleBlockMessage();
+                    if (single != null && player.isOnline() && player.getInstance() == request.instance()
+                            && request.current().getAsBoolean()) {
+                        if (error != null) for (var p : single.blocks().keySet()) {
+                            var chunk = request.instance().getChunk(p.chunkX(), p.chunkZ());
+                            if (chunk != null && chunk.isLoaded()) player.sendPacket(
+                                    new net.minestom.server.network.packet.server.play.BlockChangePacket(p,
+                                            request.instance().getBlock(p)));
+                        }
+                        if (single.sequenceId() >= 0) player.sendPacket(
+                                new net.minestom.server.network.packet.server.play.AcknowledgeBlockChangePacket(single.sequenceId()));
+                    }
+                } catch (Exception correction) {
+                    if (error == null) error = correction; else error.addSuppressed(correction);
+                }
                 queue.removeFirst(); pendingBytes -= bytes;
                 next = queue.peekFirst();
                 if (next == null) QUEUES.remove(player);

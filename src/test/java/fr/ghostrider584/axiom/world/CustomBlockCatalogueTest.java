@@ -21,7 +21,7 @@ class CustomBlockCatalogueTest {
         assertEquals("test:lamp", buffer.read(STRING)); assertEquals("Lamp", buffer.read(STRING));
         assertEquals(0, buffer.read(VAR_INT)); assertEquals(List.of(Block.STONE.stateId()), buffer.read(VAR_INT.list()));
         assertTrue(buffer.read(BOOLEAN)); assertEquals(item, buffer.read(ItemStack.NETWORK_TYPE));
-        assertTrue(buffer.read(BOOLEAN)); assertTrue(buffer.read(BOOLEAN)); assertTrue(buffer.read(BOOLEAN));
+        assertFalse(buffer.read(BOOLEAN)); assertTrue(buffer.read(BOOLEAN)); assertTrue(buffer.read(BOOLEAN));
         assertEquals(0, buffer.read(VAR_INT)); assertFalse(buffer.read(BOOLEAN));
         for (int i = 0; i < 5; i++) assertEquals(0, buffer.read(VAR_INT));
         assertEquals(0, buffer.readableBytes());

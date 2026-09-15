@@ -40,6 +40,25 @@ class AxiomEditsTest {
             assertThrows(IllegalStateException.class, request::requireCurrent);
         } finally { pending.complete(null); done.get(3, TimeUnit.SECONDS); AxiomMinestom.unregisterAxiomPlayer(player); }
     }
+    @Test void acknowledgesPredictionsAfterApplicationNotAdmission() throws Exception {
+        var player = player();
+        var started = new LinkedBlockingQueue<CompletableFuture<Void>>();
+        AxiomEdits.setTargetResolver((_, _) -> (_, _) -> {
+            var pending = new CompletableFuture<Void>(); started.add(pending); return pending;
+        });
+        var point = new net.minestom.server.coordinate.BlockVec(0,64,0);
+        var packet = new fr.ghostrider584.axiom.network.packet.client.SetBlockMessage(
+                java.util.Map.of(point, net.minestom.server.instance.block.Block.STONE), false, java.util.Set.of(),
+                0, false, null, net.minestom.server.entity.PlayerHand.MAIN, 42);
+        var done = AxiomEdits.submit(player, packet).toCompletableFuture();
+        var pending = started.poll(3, TimeUnit.SECONDS);
+        assertNotNull(pending);
+        try {
+            verify(player, never()).sendPacket(any(net.minestom.server.network.packet.server.play.AcknowledgeBlockChangePacket.class));
+            pending.complete(null); done.get(3, TimeUnit.SECONDS);
+            verify(player).sendPacket(new net.minestom.server.network.packet.server.play.AcknowledgeBlockChangePacket(42));
+        } finally { pending.complete(null); AxiomMinestom.unregisterAxiomPlayer(player); }
+    }
     @Test void rechecksNbtPermissionAndDoesNotReleaseBudgetWhenAnObserverCancels() throws Exception {
         var player = player(); var captured = new CompletableFuture<EditTarget.Request>();
         var pending = new CompletableFuture<Void>(); var allowNbt = new AtomicBoolean(true);
