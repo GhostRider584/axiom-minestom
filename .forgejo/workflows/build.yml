@@ -5,11 +5,19 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      publish:
+        description: Publish the current main version after verification
+        type: boolean
+        default: false
 
 jobs:
   verify:
     runs-on: ubuntu-latest
     timeout-minutes: 25
+    permissions:
+      contents: read
+      packages: write
     steps:
       - uses: https://git.neo.smolder.fr/actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
@@ -22,3 +30,20 @@ jobs:
         run: |
           chmod +x gradlew
           ./gradlew build --no-daemon --max-workers=2 --no-parallel
+      - name: Publish immutable public Maven artifact
+        if: github.event_name == 'workflow_dispatch' && github.ref == 'refs/heads/main' && inputs.publish == 'true'
+        env:
+          SMOLDER_MAVEN_USERNAME: ${{ secrets.SMOLDER_MAVEN_USERNAME || github.actor }}
+          SMOLDER_MAVEN_TOKEN: ${{ secrets.SMOLDER_MAVEN_TOKEN || github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version=//p' gradle.properties | tr -d '\r')"
+          [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          url="https://git.neo.smolder.fr/api/packages/SmolderOSS/maven/fr/ghostrider584/axiom-minestom/$version/axiom-minestom-$version.pom"
+          status="$(curl -sS -o /dev/null -w '%{http_code}' -u "$SMOLDER_MAVEN_USERNAME:$SMOLDER_MAVEN_TOKEN" "$url")"
+          if [ "$status" != 404 ]; then
+            echo "Publication requires an unused version; registry returned HTTP $status" >&2
+            exit 1
+          fi
+          ./gradlew publish --no-daemon --max-workers=2 --no-parallel
