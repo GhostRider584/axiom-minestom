@@ -6,6 +6,7 @@ import net.minestom.server.event.EventDispatcher;
 import net.minestom.server.event.player.PlayerBlockBreakEvent;
 import net.minestom.server.event.player.PlayerBlockPlaceEvent;
 import net.minestom.server.instance.Chunk;
+import net.minestom.server.instance.SharedInstance;
 import net.minestom.server.instance.block.Block;
 import net.minestom.server.instance.block.BlockFace;
 import net.minestom.server.registry.RegistryKey;
@@ -51,43 +52,47 @@ public final class ScheduledEditTarget implements EditTarget {
 
     private static void applyCell(Request request, EditBatch.Change change, HashSet<Chunk> changed) {
         var instance = request.instance();
-        var p = change.position();
-        var dimension = instance.getCachedDimensionType();
-        if (p.blockY() < dimension.minY() || p.blockY() >= dimension.maxY() || !instance.getWorldBorder().inBounds(p))
-            throw new IllegalArgumentException("Edit outside this world's bounds");
-        var chunk = instance.getChunk(p.chunkX(), p.chunkZ());
-        if (chunk == null || !chunk.isLoaded()) throw new IllegalStateException("Load the target chunks before editing");
-        chunk.lockWriteLock();
-        try {
-            switch (change) {
-                case EditBatch.BiomeChange biome -> {
-                    var key = RegistryKey.<net.minestom.server.world.biome.Biome>unsafeOf(biome.biome());
-                    if (MinecraftServer.getBiomeRegistry().get(key) == null) throw new IllegalArgumentException("Unknown biome " + biome.biome());
-                    chunk.setBiome(p.blockX(), p.blockY(), p.blockZ(), key);
-                }
-                case EditBatch.BlockChange block -> {
-                    Block current = chunk.getBlock(p.blockX(), p.blockY(), p.blockZ());
-                    Block replacement = block.block();
-                    if (!request.allowNbt()) replacement = replacement.id() == current.id()
-                            ? current.withProperties(replacement.properties()) : replacement.withNbt(null);
-                    var single = request.singleBlockMessage();
-                    if (single == null) chunk.setBlock(p.blockX(), p.blockY(), p.blockZ(), replacement);
-                    else {
-                        boolean updates = single.updateNeighbors() && !single.preventUpdatesAt().contains(p);
-                        var face = BlockFace.fromDirection(single.blockHit().direction());
-                        if (single.breaking()) {
-                            var event = new PlayerBlockBreakEvent(request.player(), instance, current, current, p, face);
-                            EventDispatcher.call(event);
-                            if (!event.isCancelled()) instance.setBlock(p, Block.AIR, updates);
-                        } else {
-                            var event = new PlayerBlockPlaceEvent(request.player(), instance, replacement, face, p, Vec.ZERO, single.hand());
-                            EventDispatcher.call(event);
-                            if (!event.isCancelled()) instance.setBlock(p, event.getBlock(), updates);
+        // Listeners may re-enter synchronized instance mutations. Match Minestom's
+        // instance -> chunk lock order, including SharedInstance's backing container.
+        synchronized (instance instanceof SharedInstance shared ? shared.getInstanceContainer() : instance) {
+            var p = change.position();
+            var dimension = instance.getCachedDimensionType();
+            if (p.blockY() < dimension.minY() || p.blockY() >= dimension.maxY() || !instance.getWorldBorder().inBounds(p))
+                throw new IllegalArgumentException("Edit outside this world's bounds");
+            var chunk = instance.getChunk(p.chunkX(), p.chunkZ());
+            if (chunk == null || !chunk.isLoaded()) throw new IllegalStateException("Load the target chunks before editing");
+            chunk.lockWriteLock();
+            try {
+                switch (change) {
+                    case EditBatch.BiomeChange biome -> {
+                        var key = RegistryKey.<net.minestom.server.world.biome.Biome>unsafeOf(biome.biome());
+                        if (MinecraftServer.getBiomeRegistry().get(key) == null) throw new IllegalArgumentException("Unknown biome " + biome.biome());
+                        chunk.setBiome(p.blockX(), p.blockY(), p.blockZ(), key);
+                    }
+                    case EditBatch.BlockChange block -> {
+                        Block current = chunk.getBlock(p.blockX(), p.blockY(), p.blockZ());
+                        Block replacement = block.block();
+                        if (!request.allowNbt()) replacement = replacement.id() == current.id()
+                                ? current.withProperties(replacement.properties()) : replacement.withNbt(null);
+                        var single = request.singleBlockMessage();
+                        if (single == null) chunk.setBlock(p.blockX(), p.blockY(), p.blockZ(), replacement);
+                        else {
+                            boolean updates = single.updateNeighbors() && !single.preventUpdatesAt().contains(p);
+                            var face = BlockFace.fromDirection(single.blockHit().direction());
+                            if (single.breaking()) {
+                                var event = new PlayerBlockBreakEvent(request.player(), instance, current, current, p, face);
+                                EventDispatcher.call(event);
+                                if (!event.isCancelled()) instance.setBlock(p, Block.AIR, updates);
+                            } else {
+                                var event = new PlayerBlockPlaceEvent(request.player(), instance, replacement, face, p, Vec.ZERO, single.hand());
+                                EventDispatcher.call(event);
+                                if (!event.isCancelled()) instance.setBlock(p, event.getBlock(), updates);
+                            }
                         }
                     }
                 }
-            }
-            changed.add(chunk); // Also correct a cancelled client-predicted single-block edit.
-        } finally { chunk.unlockWriteLock(); }
+                changed.add(chunk); // Also correct a cancelled client-predicted single-block edit.
+            } finally { chunk.unlockWriteLock(); }
+        }
     }
 }
