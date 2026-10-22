@@ -28,7 +28,7 @@ repositories {
 }
 
 dependencies {
-    implementation("fr.ghostrider584:axiom-minestom:0.0.5")
+    implementation("fr.ghostrider584:axiom-minestom:0.0.8")
 }
 ```
 
@@ -79,7 +79,7 @@ eventNode.addListener(AxiomSpawnEntityEvent.class, event -> {
 ```
 
 ## Demo Server
-Check out the included demo server in `demo-server/` for an example implementation.
+Check out the included demo server in `demo-server/` for an example implementation. Start it on `localhost:25565` with `./gradlew :demo-server:run`.
 
 ## Contributing
 Contributions are welcome! Please feel free to submit issues, feature requests, or pull requests.

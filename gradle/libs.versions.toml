@@ -1,8 +1,8 @@
 [versions]
-minestom = "2026.07.22-26.2"
-zstd-jni = "1.5.7-11"
-slf4j = "2.0.16"
-logback = "1.6.1"
+minestom = "2026.07.22-26.2" # https://repo1.maven.org/maven2/net/minestom/minestom/maven-metadata.xml
+zstd-jni = "1.5.7-24" # https://api.github.com/repos/luben/zstd-jni/tags
+slf4j = "2.0.20" # https://repo1.maven.org/maven2/org/slf4j/slf4j-api/maven-metadata.xml
+logback = "1.6.5" # https://repo1.maven.org/maven2/ch/qos/logback/logback-classic/maven-metadata.xml
 
 [libraries]
 minestom = { module = "net.minestom:minestom", version.ref = "minestom" }

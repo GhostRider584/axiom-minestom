@@ -2,7 +2,6 @@ package fr.ghostrider584.axiom.demo;
 
 import fr.ghostrider584.axiom.AxiomMinestom;
 import fr.ghostrider584.axiom.marker.MarkerTags;
-import net.kyori.adventure.key.Key;
 import net.minestom.server.MinecraftServer;
 import net.minestom.server.component.DataComponents;
 import net.minestom.server.coordinate.Pos;
@@ -15,15 +14,12 @@ import net.minestom.server.event.player.AsyncPlayerConfigurationEvent;
 import net.minestom.server.event.player.PlayerSpawnEvent;
 import net.minestom.server.instance.DynamicChunk;
 import net.minestom.server.instance.block.Block;
-import net.minestom.server.registry.RegistryKey;
 import net.minestom.server.tag.Tag;
 import net.minestom.server.timer.TaskSchedule;
 import net.minestom.server.world.DimensionType;
 import org.slf4j.LoggerFactory;
 
 public class TestServer {
-
-	private static final RegistryKey<DimensionType> FULLBRIGHT_DIMENSION = RegistryKey.unsafeOf(Key.key("custom:fullbright_dimension"));
 
 	public static void main(String[] args) {
 		System.setProperty("minestom.chunk-view-distance", "32");
@@ -32,9 +28,8 @@ public class TestServer {
 		logger.info("Starting server...");
 
 		final var server = MinecraftServer.init();
-		MinecraftServer.getDimensionTypeRegistry().register(FULLBRIGHT_DIMENSION.key(), DimensionType.builder().ambientLight(1.0F).build());
 
-		final var instance = MinecraftServer.getInstanceManager().createInstanceContainer(FULLBRIGHT_DIMENSION);
+		final var instance = MinecraftServer.getInstanceManager().createInstanceContainer(DimensionType.OVERWORLD);
 		instance.setChunkSupplier(DynamicChunk::new);
 		instance.setGenerator(unit -> {
 			unit.modifier().fillHeight(4, 5, Block.GRASS_BLOCK);
