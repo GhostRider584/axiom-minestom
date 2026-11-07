@@ -14,11 +14,6 @@ Axiom is a powerful client-side mod that provides advanced world editing tools,
 This library implements the server-side protocol and functionality needed to
 support Axiom clients on Minestom servers.
 
-This development branch targets **Axiom API 10 and the exact Minecraft protocol/data version
-of the linked Minestom build**. It replaces the pre-tunnel handshake; it is not yet published as
-0.0.5. See [owned-world editing and protocol limits](docs/owned-world-editing.md) before enabling
-it on valuable map data. Wire/unit checks are not a substitute for client acceptance.
-
 ## Quick Start
 
 ### 1. Add Dependency
